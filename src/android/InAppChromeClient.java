@@ -23,23 +23,41 @@ import org.apache.cordova.LOG;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
+import android.os.Message;
 import android.webkit.JsPromptResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebStorage;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.GeolocationPermissions.Callback;
 
+import android.app.Activity;
+import android.app.Dialog;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.view.WindowManager.LayoutParams;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+
 public class InAppChromeClient extends WebChromeClient {
 
-    private CordovaWebView webView;
+    private CordovaWebView parentView;
+    private WebView view;
+    private Activity activity;
+    private Dialog dialog;
+
     private String LOG_TAG = "InAppChromeClient";
     private long MAX_QUOTA = 100 * 1024 * 1024;
 
-    public InAppChromeClient(CordovaWebView webView) {
+    public InAppChromeClient(CordovaWebView parentView, Activity activity) {
         super();
-        this.webView = webView;
+        this.parentView = parentView;
+        this.activity = activity;
     }
     /**
      * Handle database quota exceeded notification.
@@ -114,7 +132,7 @@ public class InAppChromeClient extends WebChromeClient {
                             scriptResult = new PluginResult(PluginResult.Status.JSON_EXCEPTION, e.getMessage());
                         }
                     }
-                    this.webView.sendPluginResult(scriptResult, scriptCallbackId);
+                    this.parentView.sendPluginResult(scriptResult, scriptCallbackId);
                     result.confirm("");
                     return true;
                 }
@@ -122,12 +140,91 @@ public class InAppChromeClient extends WebChromeClient {
             else
             {
                 // Anything else with a gap: prefix should get this message
-                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue); 
+                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue);
                 result.cancel();
                 return true;
             }
         }
         return false;
     }
+    @Override
+    public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
 
+      // now create a new web view
+
+      this.view = new WebView(this.activity);
+      this.dialog = new Dialog(this.activity) {
+          @Override
+          public void onBackPressed () {
+            closeView();
+          }
+      };
+      this.dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+      this.dialog.setCancelable(true);
+      WebSettings settings = this.view.getSettings();
+      settings.setJavaScriptEnabled(true);
+      settings.setJavaScriptCanOpenWindowsAutomatically(true);
+      settings.setSupportMultipleWindows(true);
+      settings.setUseWideViewPort(true);
+      settings.setLoadWithOverviewMode(true);
+      this.view.setWebViewClient(new WebViewClient());
+      this.view.setWebChromeClient(new WebChromeClient(){
+          @Override
+          public void onCloseWindow(WebView window) {
+              super.onCloseWindow(window);
+              closeView();
+          }
+      });
+      this.view.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+      //this.view.setLayoutParams(new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+      this.view.requestFocus();
+      this.view.requestFocusFromTouch();
+
+      RelativeLayout webViewLayout = new RelativeLayout(this.activity);
+      webViewLayout.addView(this.view);
+
+      LinearLayout main = new LinearLayout(this.activity);
+      main.setOrientation(LinearLayout.VERTICAL);
+      main.addView(webViewLayout);
+      // tell the transport about the new view
+      WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+      transport.setWebView(this.view);
+      resultMsg.sendToTarget();
+
+      WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+      lp.copyFrom(this.dialog.getWindow().getAttributes());
+      lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+      lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+      lp.x = -100;
+      lp.y = -100;
+
+      this.dialog.setContentView(main);
+      this.dialog.show();
+      this.dialog.getWindow().setAttributes(lp);
+
+      return true;
+    }
+
+    @Override
+    public void onCloseWindow(WebView view){
+        super.onCloseWindow(view);
+        if (this.dialog != null) {
+          this.dialog.dismiss();
+          this.dialog = null;
+        }
+    }
+
+    public void closeView() {
+      this.view.setWebViewClient(new WebViewClient() {
+          // NB: wait for about:blank before dismissing
+          public void onPageFinished(WebView view, String url) {
+              if (dialog != null) {
+                  dialog.dismiss();
+                  dialog = null;
+              }
+          }
+      });
+      this.view.loadUrl("about:blank");
+    }
 }
