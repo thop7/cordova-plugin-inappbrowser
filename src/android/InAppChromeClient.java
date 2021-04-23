@@ -24,6 +24,7 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import android.net.Uri;
 
 import android.os.Message;
 import android.webkit.JsPromptResult;
@@ -33,6 +34,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.GeolocationPermissions.Callback;
+import android.webkit.ValueCallback;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -168,11 +170,17 @@ public class InAppChromeClient extends WebChromeClient {
       settings.setUseWideViewPort(true);
       settings.setLoadWithOverviewMode(true);
       this.view.setWebViewClient(new WebViewClient());
+      WebChromeClient parent = this;
       this.view.setWebChromeClient(new WebChromeClient(){
           @Override
           public void onCloseWindow(WebView window) {
               super.onCloseWindow(window);
               closeView();
+          }
+          // For Android 5.0+
+          public boolean onShowFileChooser (WebView webView, ValueCallback<Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams)
+          {
+              return parent.onShowFileChooser(webView, filePathCallback, fileChooserParams);
           }
       });
       this.view.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -223,6 +231,9 @@ public class InAppChromeClient extends WebChromeClient {
                   dialog.dismiss();
                   dialog = null;
               }
+              view.removeAllViews();
+              view.destroy();
+              view = null;
           }
       });
       this.view.loadUrl("about:blank");
