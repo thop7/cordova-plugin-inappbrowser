@@ -27,6 +27,8 @@ import org.json.JSONObject;
 import android.net.Uri;
 
 import android.os.Message;
+import android.os.Build;
+import android.annotation.TargetApi;
 import android.webkit.JsPromptResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebStorage;
@@ -35,6 +37,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.GeolocationPermissions.Callback;
 import android.webkit.ValueCallback;
+import android.webkit.WebResourceRequest;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -169,7 +172,28 @@ public class InAppChromeClient extends WebChromeClient {
       settings.setSupportMultipleWindows(true);
       settings.setUseWideViewPort(true);
       settings.setLoadWithOverviewMode(true);
-      this.view.setWebViewClient(new WebViewClient());
+      this.view.setWebViewClient(new WebViewClient() {
+        @SuppressWarnings("deprecation")
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            url = this.checkUrl(view, url);
+            return super.shouldOverrideUrlLoading(view, url);
+        }
+
+        @TargetApi(Build.VERSION_CODES.N)
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            this.checkUrl(view, request.getUrl().getHost());
+            return super.shouldOverrideUrlLoading(view, request);
+        }
+        private String checkUrl(WebView view, String url) {
+            if (url.endsWith(".pdf")) {
+                url = "https://drive.google.com/viewerng/viewer?embedded=true&url=" + url;
+                view.loadUrl(url);
+            }
+            return url;
+        }
+      });
       WebChromeClient parent = this;
       this.view.setWebChromeClient(new WebChromeClient(){
           @Override
